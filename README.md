@@ -1,20 +1,36 @@
-# wikipedia-geo
+# wikipedia-geotagged
 
-Which English Wikipedia articles are about a place, and how those places are
-linked to one another.
+Which English Wikipedia articles are about a place, their text, and how those
+places are linked to one another.
 
 Wikipedia's GeoData extension attaches coordinates to pages. 1,411,568 pages
 carry one; 1,374,075 of those are articles rather than redirects. That is the
 subset of Wikipedia that is about geography, and it is about a fifth of the
 encyclopedia.
 
+The corpus built from it is published as
+[`yuiseki/wikipedia-geotagged`](https://huggingface.co/datasets/yuiseki/wikipedia-geotagged):
+1,374,056 articles, 3.84 billion characters, with the coordinates alongside the
+text. Its card is `data/README.md`.
+
 ## What is here
 
     src/geo_pages.py          joins geo_tags to page titles
     src/link_qids.py          attaches a Wikidata id to each article
+    src/extract_text.py       pulls those articles' text out of the XML dump
+    src/publish.py            writes the Parquet and pushes it to the Hub
     src/geo_graph.py          extracts the links between geographic articles
     src/closure.py            every ancestor of every place, not just the parent
     src/compare_hierarchy.py  links against hierarchy, three ways
+
+Building the corpus is three steps:
+
+    python3 src/geo_pages.py    --geo-tags enwiki-geo_tags.sql.gz --page enwiki-page.sql.gz --out geo_pages.jsonl
+    python3 src/link_qids.py    --geo-pages geo_pages.jsonl --page-props enwiki-page_props.sql.gz --out geo_pages_qid.jsonl
+    python3 src/extract_text.py --dump enwiki-pages-articles.xml.bz2 --geo-pages geo_pages_qid.jsonl --out corpus.jsonl.gz
+
+The article dump is 25.7 GB of bzip2 and decompression is the whole cost, so
+`extract_text.py` hands it to `lbzip2` and reads the stream.
 
 ## The dumps it reads
 
