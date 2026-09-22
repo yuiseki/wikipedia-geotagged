@@ -19,9 +19,16 @@ import gzip
 import json
 import re
 
-# (gt_id, gt_page_id, gt_globe, gt_primary, gt_lat, gt_lon, gt_dim, gt_type, ...)
+# The whole row, not the first eight columns. gt_globe carries moon, mars,
+# venus, mercury and titan as well as earth; gt_country and gt_region hold ISO
+# codes on 41.3% and 14.2% of tags; gt_name is set on 833,597. None of it can
+# be recomputed from what is kept, so all of it is kept.
+#
+# (gt_id, gt_page_id, gt_globe, gt_primary, gt_lat, gt_lon, gt_dim, gt_type,
+#  gt_name, gt_country, gt_region, gt_lat_int, gt_lon_int)
 GEO = re.compile(rb"\((\d+),(\d+),'([^']*)',(\d+),([-\d.]+|NULL),([-\d.]+|NULL),"
-                 rb"([-\d]+|NULL),(NULL|'[^']*')")
+                 rb"([-\d]+|NULL),(NULL|'[^']*'),(NULL|'(?:[^'\\]|\\.)*'),"
+                 rb"(NULL|'[^']*'),(NULL|'[^']*')")
 # (page_id, page_namespace, page_title, page_is_redirect, page_is_new, ...)
 PAGE = re.compile(rb"\((\d+),(\d+),'((?:[^'\\]|\\.)*)',(\d+),(\d+),")
 
@@ -36,24 +43,38 @@ def values(path):
                 yield line
 
 
+def unquote(raw):
+    """A dump value: a bare NULL, or a quoted string."""
+    if raw == b"NULL":
+        return None
+    return raw.strip(b"'").decode("utf-8", "ignore") or None
+
+
 def read_geo(path):
-    """page id -> (primary tag?, type, lat, lon)."""
-    out = {}
+    """page id -> every tag on it, with the primary one first.
+
+    A page can carry several tags. The primary one is the page's own location;
+    the rest are places it mentions. 44,477 pages have two and 7,173 have
+    three, so dropping the others would lose a relation that nothing else
+    records.
+    """
+    out = collections.defaultdict(list)
     for line in values(path):
         for m in GEO.finditer(line):
             pid = int(m.group(2))
-            primary = m.group(4) == b"1"
-            raw = m.group(8)
-            # The dump writes an absent value as the literal NULL, without
-            # quotes. Decoding it as text stores the string "NULL" and hides
-            # that 57.5% of tags carry no type at all.
-            kind = None if raw == b"NULL" else (raw.strip(b"'").decode("utf-8", "ignore") or None)
-            lat = None if m.group(5) == b"NULL" else float(m.group(5))
-            lon = None if m.group(6) == b"NULL" else float(m.group(6))
-            # A page can carry several tags. The primary one is the page's own
-            # location; the rest are places it mentions.
-            if primary or pid not in out:
-                out[pid] = (primary, kind, lat, lon)
+            out[pid].append({
+                "primary": m.group(4) == b"1",
+                "lat": None if m.group(5) == b"NULL" else float(m.group(5)),
+                "lon": None if m.group(6) == b"NULL" else float(m.group(6)),
+                "dim": None if m.group(7) == b"NULL" else int(m.group(7)),
+                "type": unquote(m.group(8)),
+                "name": unquote(m.group(9)),
+                "country": unquote(m.group(10)),
+                "region": unquote(m.group(11)),
+                "globe": m.group(3).decode("utf-8", "ignore"),
+            })
+    for tags in out.values():
+        tags.sort(key=lambda t: not t["primary"])
     return out
 
 
@@ -86,11 +107,19 @@ def main():
     kinds = collections.Counter()
     with open(a.out, "w", encoding="utf-8") as f:
         for pid, title in sorted(titles.items()):
-            primary, kind, lat, lon = geo[pid]
-            kinds[kind or "(none)"] += 1
-            f.write(json.dumps({"page_id": pid, "title": title,
-                                "primary": primary, "gt_type": kind,
-                                "lat": lat, "lon": lon}, ensure_ascii=False) + "\n")
+            tags = geo[pid]
+            head = tags[0]
+            kinds[head["type"] or "(none)"] += 1
+            f.write(json.dumps({
+                "page_id": pid,
+                "title": title,
+                "lat": head["lat"], "lon": head["lon"],
+                "gt_type": head["type"], "gt_globe": head["globe"],
+                "gt_dim": head["dim"], "gt_country": head["country"],
+                "gt_region": head["region"], "gt_name": head["name"],
+                "gt_primary": head["primary"],
+                "tags": tags,
+            }, ensure_ascii=False) + "\n")
     print("gt_type\tcount")
     for k, n in kinds.most_common(15):
         print(f"{k}\t{n:,}")

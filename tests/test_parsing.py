@@ -72,3 +72,19 @@ def test_two_page_ids_pack_into_one_integer():
     import compare_hierarchy
     assert compare_hierarchy.pack(1, 2) != compare_hierarchy.pack(2, 1)
     assert compare_hierarchy.pack(39009140, 12) == (39009140 << 32) | 12
+
+
+def test_the_card_names_the_file_that_is_uploaded():
+    """data_files in the card has to be the path publish.py writes to.
+
+    They are set in different files, so nothing but a test connects them. Get
+    it wrong and the dataset viewer finds no data while every upload succeeds.
+    """
+    import re
+    import publish
+
+    base = os.path.join(os.path.dirname(__file__), "..")
+    card = open(os.path.join(base, "data/README.md"), encoding="utf-8").read()
+    declared = re.search(r"^\s*data_files:\s*(\S+)\s*$", card, re.M)
+    assert declared, "the card declares no data_files"
+    assert declared.group(1) == publish.PATH_IN_REPO

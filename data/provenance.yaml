@@ -1,0 +1,95 @@
+# Where this dataset came from and what was done to it. Written for a person
+# deciding whether to trust it, and for a machine checking it is still current.
+
+dataset:
+  name: wikipedia-geotagged
+  built: 2026-09-22
+  articles: 1374056
+  characters: 3843346999
+  languages: [en]
+
+licence:
+  text: CC BY-SA 4.0
+  basis: >
+    The text is English Wikipedia and carries Wikipedia's licence. Attribution
+    and share-alike both apply; the url column locates each article's history,
+    which is where its authors are listed.
+  reference: https://en.wikipedia.org/wiki/Wikipedia:Copyrights
+  coordinates: >
+    From MediaWiki's GeoData extension, published in the same dumps.
+  wikidata_ids: CC0, from Wikidata
+  code: Apache-2.0
+
+sources:
+  - name: geo_tags
+    file: enwiki-latest-geo_tags.sql.gz
+    bytes: 53391772
+    note: >
+      The GeoData extension's table of coordinates per page. 1,411,568 pages
+      carry one. This is what makes the selection exact rather than heuristic:
+      an editor wrote a coord template, so the article is about a place.
+  - name: page
+    file: enwiki-latest-page.sql.gz
+    bytes: 2393769310
+    note: geo_tags holds page ids only; titles and namespaces come from here.
+  - name: page_props
+    file: enwiki-latest-page_props.sql.gz
+    bytes: 470958111
+    note: >
+      wikibase_item gives the Wikidata id for 99.9% of the articles. Matching
+      titles as strings was tried first and reached 52.8%, and could not tell
+      Alexander the Great from a town.
+  - name: pages-articles
+    file: enwiki-latest-pages-articles.xml.bz2
+    bytes: 25680955982
+    note: the article text, streamed rather than expanded to disk.
+
+processing:
+  - step: selecting the geographic articles
+    script: src/geo_pages.py
+    results:
+      pages_with_a_coordinate: 1411568
+      articles_not_redirects: 1374075
+    note: >
+      Namespace 0 and not a redirect. Every column of geo_tags is kept, and
+      every tag on a page, not only the primary one: 44,477 pages carry two
+      tags and 7,173 carry three, and the non-primary ones are places the
+      article mentions rather than where it is.
+
+  - step: attaching Wikidata ids
+    script: src/link_qids.py
+    results:
+      with_a_wikidata_item: 1373281
+
+  - step: extracting the text
+    script: src/extract_text.py
+    note: >
+      lbzip2 streams the dump in and iterparse walks it an element at a time,
+      clearing each page as it goes, so nothing near 100 GB is ever held. The
+      wikitext cleaner unwraps templates and tables rather than stripping them.
+
+  - step: publication
+    script: src/publish.py
+    output: articles.parquet
+    note: >
+      Streamed into Parquet. The first four columns match wikimedia/wikipedia
+      so that code written for it works unchanged.
+
+known_limitations:
+  - >
+    Takes everything geo_tags lists, without filtering. 6.1% of the articles
+    are not places: Apollo 11, Alexander the Great, Alfred Nobel. Their
+    coordinates are a landing site, a birthplace, a headquarters.
+  - >
+    Organisations rank high by incoming links from other geotagged articles:
+    National Park Service 80,126, United States Geological Survey 47,487,
+    2020 United States census 44,544. American settlement articles cite them
+    by template.
+  - >
+    10,681 tags are not on Earth: moon 4,911, Mars 3,145, Venus 1,222,
+    Mercury 944, Titan 459. Filter on gt_globe.
+  - >
+    gt_type is null on 57.5% of articles, so filtering by it keeps far less
+    than it should. Joining qid against wikidata-gazetteer and using
+    instance_of is the reliable way.
+  - English only. geo_tags exists for every language edition.
