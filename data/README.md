@@ -15,8 +15,10 @@ tags:
 - gazetteer
 pretty_name: Geotagged Wikipedia
 configs:
-- config_name: default
-  data_files: articles.parquet
+- config_name: 20260901.en
+  data_files:
+  - split: train
+    path: 20260901.en/train-*
 ---
 
 # Geotagged Wikipedia
@@ -26,6 +28,12 @@ Every English Wikipedia article that carries coordinates, with its text.
 1,374,056 articles, 3,843,346,999 characters. Built from the
 `20260901` dumps. The `page` table lists 1,374,075 geotagged articles; 19 of
 them are not in the article dump, which is taken a little later.
+
+    from datasets import load_dataset
+    ds = load_dataset("yuiseki/wikipedia-geotagged", "20260901.en")
+
+The subset is named `{dump}.{lang}`, as in `wikimedia/wikipedia`. A later dump
+or another language is added beside this one rather than replacing it.
 
 The first four columns are `id`, `url`, `title` and `text`, in that order and
 under those names, so that anything written for

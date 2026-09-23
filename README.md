@@ -13,6 +13,14 @@ The corpus built from it is published as
 1,374,056 articles, 3.84 billion characters, with the coordinates alongside the
 text. Its card is `data/README.md`.
 
+    from datasets import load_dataset
+    ds = load_dataset("yuiseki/wikipedia-geotagged", "20260901.en")
+
+Subsets are named `{dump}.{lang}` and hold `train-NNNNN-of-NNNNN.parquet`, the
+layout `wikimedia/wikipedia` uses. A later dump or another language is added
+beside the existing one rather than replacing it, so a result stays
+reproducible after the next dump lands.
+
 ## What is here
 
     src/geo_pages.py          joins geo_tags to page titles
@@ -28,6 +36,7 @@ Building the corpus is three steps:
     python3 src/geo_pages.py    --geo-tags enwiki-geo_tags.sql.gz --page enwiki-page.sql.gz --out geo_pages.jsonl
     python3 src/link_qids.py    --geo-pages geo_pages.jsonl --page-props enwiki-page_props.sql.gz --out geo_pages_qid.jsonl
     python3 src/extract_text.py --dump enwiki-pages-articles.xml.bz2 --geo-pages geo_pages_qid.jsonl --out corpus.jsonl.gz
+    python3 src/publish.py      --jsonl corpus.jsonl.gz --dump 20260901 --lang en
 
 The article dump is 25.7 GB of bzip2 and decompression is the whole cost, so
 `extract_text.py` hands it to `lbzip2` and reads the stream.
