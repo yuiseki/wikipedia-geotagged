@@ -149,3 +149,239 @@ def test_only_the_outer_quotes_come_off():
     assert geo_pages.unquote(rb"'USS \'\'S-37\'\''") == "USS ''S-37''"
     assert geo_pages.unquote(rb"''") is None
     assert geo_pages.unquote(rb"'Paris'") == "Paris"
+
+
+def test_a_file_link_leaves_its_caption_and_nothing_else():
+    """A file link has more than one pipe, which the old pattern never matched.
+
+    [[File:X.jpg|thumb|220px|A caption]] survived whole into the text, so 55.6%
+    of English articles and 71.0% of Japanese ones carried image markup as
+    prose. The caption is worth keeping: it is written by an editor and names
+    places the body sometimes does not.
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        "[[File:Dogo.JPG|thumb|220px|3000年の歴史を有する道後温泉の本館]] です。")
+    assert "道後温泉の本館" in out
+    assert "thumb" not in out and "220px" not in out
+    assert "[[" not in out and "]]" not in out and ".JPG" not in out
+
+
+def test_a_file_link_with_no_caption_leaves_nothing():
+    import wikitext
+
+    out = wikitext.clean("[[ファイル:Flag of Matsuyama.svg|100px]] 松山市の旗")
+    assert "松山市の旗" in out
+    assert "Flag of Matsuyama" not in out and "100px" not in out
+
+
+def test_a_plain_link_keeps_its_label():
+    import wikitext
+
+    assert wikitext.clean("[[Ehime Prefecture|Ehime]] is warm.").startswith("Ehime is warm")
+    assert wikitext.clean("[[Matsuyama]] is a city.").startswith("Matsuyama is a city")
+
+
+def test_a_link_inside_a_caption_is_unwrapped_too():
+    """Captions contain links, so one pass is not enough."""
+    import wikitext
+
+    out = wikitext.clean("[[File:X.jpg|thumb|The [[Dogo Onsen|onsen]] at night]]")
+    assert out.strip() == "The onsen at night"
+
+
+def test_table_attributes_do_not_become_prose():
+    import wikitext
+
+    out = wikitext.clean('{{Infobox|style="width:280px; margin:2px auto"|name=Matsuyama}}')
+    assert "width:280px" not in out and "style" not in out
+
+
+def test_a_template_containing_a_table_does_not_leak_its_attributes():
+    """The innermost-template pattern cannot cross a brace, and a table opens
+    with one. An infobox holding a table was therefore never unwrapped, and its
+    raw markup reached the text: every Japanese city article began with
+    style="width:280px; margin:2px auto".
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        '{{Infobox\n|image=\n{|style="width:280px"\n|-\n|A caption\n|}\n'
+        '|name=Matsuyama\n}}\n松山市（まつやまし）は、愛媛県の中部に位置する市である。')
+    assert "松山市（まつやまし）は、愛媛県の中部に位置する市である。" in out
+    assert "width:280px" not in out
+    assert "style=" not in out
+
+
+def test_a_reference_leaves_nothing_whatever_its_shape():
+    import wikitext
+
+    for ref in ('<ref name="a">Some source</ref>',
+                '<ref name="19940617-notification-04" />',
+                '<ref>Plain</ref>'):
+        out = wikitext.clean(f"御蔵島村は、東京都の島嶼部に位置する村。{ref}")
+        assert out.startswith("御蔵島村は、東京都の島嶼部に位置する村。"), (ref, out)
+        assert "19940617" not in out and "Some source" not in out
+
+
+def test_a_self_closing_reference_does_not_swallow_the_article():
+    """<ref name="x" /> matches <ref[^>]*>, and the search for </ref> then runs
+    past everything between. 御蔵島村's opening sentence disappeared this way:
+    a self-closing ref in the infobox ate the text up to the next real
+    reference, several hundred characters later.
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        '告示第4号<ref name="notice-04" />\n\n'
+        "'''御蔵島村'''（みくらじまむら）は、[[東京都]]の[[東京都島嶼部|島嶼部]]に位置する[[村]]。"
+        "<ref>出典</ref>")
+    assert "御蔵島村（みくらじまむら）は、東京都の島嶼部に位置する村。" in out
+    assert "notice-04" not in out and "出典" not in out
+
+
+def test_a_link_inside_a_template_argument_survives_the_split():
+    """Templates are split on the pipe, and so is a link inside one.
+
+    [[Yellowhammer|Yellowhammer]] State in an infobox argument came out as
+    "Yellowhammer]] State", which is where nearly every stray bracket in the
+    corpus came from. Links have to be unwrapped before the split.
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        "{{Infobox\n|nickname=The [[Yellowhammer (bird)|Yellowhammer]] State, "
+        "the Heart of Dixie\n}}\nAlabama is a state.")
+    assert "]]" not in out and "[[" not in out
+    assert "Yellowhammer State" in out
+
+
+def test_a_reference_inside_a_template_leaves_nothing():
+    import wikitext
+
+    out = wikitext.clean(
+        '{{Infobox|紋章=1994年4月1日制定<ref name="19940617-notification-04">'
+        "御蔵島村の紋章及び木に関する告示 平成6年6月17日 告示第4号</ref>}}\n本文。")
+    assert "19940617" not in out
+    assert "告示第4号" not in out
+
+
+def test_a_table_written_with_magic_word_templates_is_read_as_a_table():
+    """{{(!}} is {|, {{!}} is |, {{!!}} is ||. Japanese city infoboxes build
+    their image montage this way. Unwrapping them as ordinary templates threw
+    away the pipes and left style="width:280px" standing as prose, which is
+    how every 市 article came to start with a CSS declaration.
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        '{{(!}} style="width:280px; margin:2px auto"\n'
+        '{{!}} style="width:50%"{{!}}[[道後温泉]]{{!!}}[[正岡子規]]歌碑\n'
+        "{{!-}}\n{{!}}[[松山城]]天守\n{{!)}}")
+    assert "width:280px" not in out and "style" not in out
+    assert "道後温泉" in out and "松山城天守" in out
+
+
+def test_a_bare_attribute_run_is_not_prose():
+    import wikitext
+
+    assert wikitext.clean('style="vertical-align:middle"\n本文です。').strip() == "本文です。"
+
+
+def test_unquoted_cell_attributes_come_off_too():
+    """The old pattern required every attribute in the run to be quoted, so
+    colspan="2" data-sort-type=number |Alone kept the whole run as prose.
+    """
+    import wikitext
+
+    out = wikitext.clean('{|\n|-\n|colspan="2" data-sort-type=number |Alone\n|}')
+    assert out.strip() == "Alone"
+
+
+def test_a_table_caption_keeps_only_the_caption():
+    import wikitext
+
+    out = wikitext.clean('{|\n|+ style="font-size:90%" |Racial composition\n|}')
+    assert out.strip() == "Racial composition"
+
+
+def test_templates_are_unwrapped_however_deep_they_nest():
+    import wikitext
+
+    out = wikitext.clean("{{a|{{b|{{c|{{d|{{e|{{as of|2023|February|}}}}}}}}}}}}, there are voters.")
+    assert "{{" not in out and "}}" not in out
+
+
+def test_a_template_ending_in_an_empty_argument_is_not_a_table():
+    """{{as of|2023|February|}} ends in |}, which is also how a table closes.
+
+    Hiding the table markers while templates unwrap broke this: the template
+    lost its closing brace to the disguise and survived whole. MediaWiki only
+    reads {| and |} at the start of a line, so that is where they are hidden.
+    """
+    import wikitext
+
+    out = wikitext.clean("{{as of|2023|February|}}, there are voters.")
+    assert out.strip() == ", there are voters."
+
+
+def test_a_template_in_a_caption_is_not_split_by_the_caption_split():
+    """A link body is split on the pipe, and a template inside it has pipes.
+
+    [[File:X.jpg|thumb|200px|[[ヒメツリガネゴケ]] {{Snamei||Physcomitrium patens}}
+    の原糸体。]] lost its {{Snamei and kept the closing braces, which is where
+    13.3% of Japanese articles got a stray }} from.
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        "[[File:P.jpg|thumb|200px|[[ヒメツリガネゴケ]] {{Snamei||Physcomitrium patens}}"
+        " の[[原糸体]]。]]\nコケ植物の配偶体は。")
+    assert "}}" not in out and "{{" not in out
+    assert "原糸体" in out
+
+
+def test_a_lone_brace_inside_a_template_does_not_stop_it_matching():
+    """{{chem2|C_{n}H_{2n+2} }} has single braces, and a pattern that forbids
+    every brace could not cross them, so the template survived as prose.
+    """
+    import wikitext
+
+    out = wikitext.clean("Alkanes have the formula {{chem2|C_{n}H_{2n+2} }}. Single bonds.")
+    assert "{{" not in out and "}}" not in out
+    assert out.strip().startswith("Alkanes have the formula")
+
+
+def test_non_prose_blocks_are_dropped_whole():
+    """Music, formulae and code are not sentences, and their braces confuse
+    everything downstream. An American in Paris put a page of LilyPond into
+    the corpus this way.
+    """
+    import wikitext
+
+    for tag in ("score", "math", "syntaxhighlight", "timeline", "nowiki"):
+        out = wikitext.clean(f"Before. <{tag}>{{ \\tempo 4 = 96 }}</{tag}> After.")
+        assert out.strip() == "Before. After.", (tag, out)
+
+
+def test_a_gallery_keeps_its_captions_and_drops_its_filenames():
+    import wikitext
+
+    out = wikitext.clean(
+        "<gallery>\nFile:Matsuyama.jpg|松山城の天守\nFile:Dogo.jpg|道後温泉\n</gallery>")
+    assert "松山城の天守" in out and "道後温泉" in out
+    assert ".jpg" not in out and "File:" not in out
+
+
+def test_a_gallery_caption_that_is_a_link_keeps_its_bracket_pair():
+    """split_pipes counted braces and not brackets, so File:X.jpg|[[Hoggar]]
+    was split inside the link and left Hoggar]] in the text.
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        "<gallery>\nFile:Hoggar.jpg|[[Hoggar]]\n"
+        "File:A.jpg|[[Aristotle]] by [[Jusepe de Ribera|Ribera]]\n</gallery>")
+    assert "]]" not in out and "[[" not in out
+    assert "Hoggar" in out and "Aristotle by Ribera" in out
