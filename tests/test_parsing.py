@@ -102,3 +102,36 @@ def test_templates_and_tables_are_unwrapped_not_removed():
     assert "railway=station" in out
     assert "railway station" in out
     assert "{{" not in out and "[[" not in out
+
+
+def test_a_dump_escape_is_undone_in_titles_and_names():
+    """The dumps escape quotes and backslashes; the value is not the raw bytes.
+
+    Found on Wikivoyage, whose first geotagged page is 's-Hertogenbosch and
+    came out as \\'s-Hertogenbosch. 216 of its 29,505 titles carry an escape.
+    Wikipedia hides this: its geo_pages title is only used for reporting, and
+    the published title comes from the XML dump instead.
+    """
+    line = rb"(10,0,'\'s-Hertogenbosch',0,0,0.922237949364,'20260828224346',"
+    m = geo_pages.PAGE.search(line)
+    assert m
+    assert geo_pages.unescape(m.group(3)) == b"'s-Hertogenbosch"
+
+
+def test_unquote_undoes_escapes_too():
+    assert geo_pages.unquote(rb"'Coeur d\'Alene'") == "Coeur d'Alene"
+    assert geo_pages.unquote(rb"'a\\b'") == "a\\b"
+    assert geo_pages.unquote(b"NULL") is None
+
+
+def test_only_the_outer_quotes_come_off():
+    """strip() takes every quote at the ends, not the one that delimits.
+
+    A value ending in an escaped quote ends in backslash, quote, quote: the
+    delimiter and the escaped character look the same to strip, which ate the
+    escaped one and left its backslash. It survived the first fix of this bug
+    and showed up as USS ''S-37'\\ in 225 of 1,374,056 records.
+    """
+    assert geo_pages.unquote(rb"'USS \'\'S-37\'\''") == "USS ''S-37''"
+    assert geo_pages.unquote(rb"''") is None
+    assert geo_pages.unquote(rb"'Paris'") == "Paris"

@@ -43,11 +43,44 @@ def values(path):
                 yield line
 
 
+ESCAPES = {b"0": b"\x00", b"n": b"\n", b"r": b"\r", b"Z": b"\x1a"}
+
+
+def unescape(raw):
+    """Undo the dump's backslash escapes.
+
+    mysqldump writes a quote inside a value as \\', so the bytes between the
+    quotes are not the value. 's-Hertogenbosch, the first geotagged page on
+    Wikivoyage, came out as \\'s-Hertogenbosch until this existed.
+    """
+    if b"\\" not in raw:
+        return raw
+    out = bytearray()
+    i = 0
+    while i < len(raw):
+        if raw[i:i + 1] == b"\\" and i + 1 < len(raw):
+            c = raw[i + 1:i + 2]
+            out += ESCAPES.get(c, c)
+            i += 2
+        else:
+            out += raw[i:i + 1]
+            i += 1
+    return bytes(out)
+
+
 def unquote(raw):
-    """A dump value: a bare NULL, or a quoted string."""
+    """A dump value: a bare NULL, or a quoted string.
+
+    One quote comes off each end, not every quote at each end. A value ending
+    in an escaped quote ends in backslash, quote, quote, and strip() cannot
+    tell the delimiter from the escaped character: it took both and left the
+    backslash behind.
+    """
     if raw == b"NULL":
         return None
-    return raw.strip(b"'").decode("utf-8", "ignore") or None
+    if len(raw) >= 2 and raw[:1] == b"'" and raw[-1:] == b"'":
+        raw = raw[1:-1]
+    return unescape(raw).decode("utf-8", "ignore") or None
 
 
 def read_geo(path):
@@ -88,7 +121,7 @@ def read_titles(path, wanted):
                 continue
             if int(m.group(2)) != ARTICLE_NAMESPACE or m.group(4) == b"1":
                 continue
-            out[pid] = m.group(3).decode("utf-8", "ignore").replace("_", " ")
+            out[pid] = unescape(m.group(3)).decode("utf-8", "ignore").replace("_", " ")
     return out
 
 
