@@ -88,3 +88,17 @@ def test_the_card_names_the_file_that_is_uploaded():
     declared = re.search(r"^\s*data_files:\s*(\S+)\s*$", card, re.M)
     assert declared, "the card declares no data_files"
     assert declared.group(1) == publish.PATH_IN_REPO
+
+
+def test_templates_and_tables_are_unwrapped_not_removed():
+    """The cleaner keeps what is inside braces and pipes.
+
+    A cleaner that deletes templates deletes the facts: an infobox is often
+    the only place an article states a population or an elevation.
+    """
+    import wikitext
+
+    out = wikitext.clean("{{Tag|railway|station}} is a [[railway station]].")
+    assert "railway=station" in out
+    assert "railway station" in out
+    assert "{{" not in out and "[[" not in out

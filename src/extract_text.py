@@ -17,7 +17,6 @@ import sys
 from urllib.parse import quote
 import xml.etree.ElementTree as ET
 
-sys.path.insert(0, "/Workspaces/repos/__yuiseki/_research_ai/YuisekinAI/src/data")
 from wikitext import clean  # noqa: E402
 
 
@@ -38,6 +37,9 @@ def main():
     ap.add_argument("--geo-pages", required=True)
     ap.add_argument("--out", required=True, help="written gzipped")
     ap.add_argument("--threads", type=int, default=8)
+    ap.add_argument("--base-url", default="https://en.wikipedia.org/wiki/",
+                    help="prefix for the url column; the only site-specific "
+                         "thing in this file")
     a = ap.parse_args()
 
     wanted = {}
@@ -74,7 +76,7 @@ def main():
                 # is a join away on qid.
                 out.write(json.dumps({
                     "id": str(pid),
-                    "url": "https://en.wikipedia.org/wiki/"
+                    "url": a.base_url
                            + quote(title.replace(" ", "_"), safe="/:()',!*-"),
                     "title": title,
                     "text": body,
