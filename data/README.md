@@ -32,6 +32,10 @@ under those names, so that anything written for
 [`wikimedia/wikipedia`](https://huggingface.co/datasets/wikimedia/wikipedia)
 works here unchanged. Everything after them is geography.
 
+[`yuiseki/wikivoyage-geotagged`](https://huggingface.co/datasets/yuiseki/wikivoyage-geotagged)
+is the same thing built from Wikivoyage by the same code, with the same
+columns. The two concatenate.
+
 Code: https://github.com/yuiseki/wikipedia-geotagged
 
 ## What `geo_tags` is, and why it deserves to be better known
@@ -124,15 +128,32 @@ the 729 languages Wikidata gives coordinates to and about 36,000 organisations.
 
 ## How dense in place names is it
 
-Measured against the English names in `wikidata-gazetteer`, on a sample of
-120,000 articles: 5.48 mentions per 1,000 characters, 99.7% of articles naming
-at least one place, 101,606 distinct names. Of six corpora measured the same
-way, including UN documents, Wikivoyage, Wikinews, the OpenStreetMap Wiki and
-World Bank reports, this is the densest and the most varied.
+Measured against the English names in `wikidata-gazetteer` with the languages
+excluded, requiring a one-word name to have 100 sitelinks before it counts, on
+a sample of 20,000 articles:
 
-1.6% of its matches are a single capitalised word at the start of a sentence,
-which is where false positives gather. For UN documents the figure is 15.2%. So
-the measurement is most trustworthy exactly where the corpus is richest.
+| | wikipedia-geotagged | wikivoyage-geotagged |
+|---|---|---|
+| mentions per 1,000 characters | 5.46 | 3.85 |
+| articles naming at least one place | 99.7% | 99.2% |
+| distinct names, per 20,000 articles | 34,642 | 48,103 |
+| one-word matches at a sentence start | 1.8% | 2.8% |
+
+Densest of six corpora measured the same way, ahead of UN documents at 3.50,
+Wikinews at 3.40, the OpenStreetMap Wiki at 1.32 and World Bank reports at
+0.23. Not the most varied: a
+[Wikivoyage](https://huggingface.co/datasets/yuiseki/wikivoyage-geotagged)
+article is three times longer and names more distinct places, though fewer per
+character.
+
+The last row is the measurement's own error bar. A single capitalised word at
+the start of a sentence is where false positives gather, and 1.8% is the lowest
+of the six; UN documents put 15.2% of their matches there. The measurement is
+most trustworthy exactly where the corpus is densest.
+
+The sitelinks floor is not a detail. Without it the same sample reads 10.62 per
+1,000 characters and 11.8% at a sentence start, because `This`, `They` and
+`Most` are all place names somewhere.
 
 ## What is not here
 

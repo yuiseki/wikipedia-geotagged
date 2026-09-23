@@ -3,7 +3,7 @@
 
 dataset:
   name: wikipedia-geotagged
-  built: 2026-09-22
+  built: 2026-09-23
   articles: 1374056
   characters: 3843346999
   languages: [en]
@@ -93,3 +93,21 @@ known_limitations:
     than it should. Joining qid against wikidata-gazetteer and using
     instance_of is the reliable way.
   - English only. geo_tags exists for every language edition.
+
+corrections:
+  - date: 2026-09-23
+    what: >
+      2,217 gt_name values, and the matching entries in tags, carried the
+      dump's backslash escapes: St John\'s College rather than St John's
+      College. The titles and the text were never affected, because they come
+      from the XML dump rather than from the SQL tables.
+    found_by: >
+      Building the Wikivoyage corpus with the same code. Its first geotagged
+      page is 's-Hertogenbosch, where the escape is the first character of the
+      title and impossible to miss.
+    fixed_in: src/geo_pages.py, unescape() and unquote()
+    note: >
+      The first attempt at the fix left 225 of them broken in a new way:
+      strip() takes every quote at the end of a value, and a value ending in
+      an escaped quote ends in backslash, quote, quote. Both versions are in
+      the tests.
