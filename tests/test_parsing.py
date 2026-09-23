@@ -385,3 +385,19 @@ def test_a_gallery_caption_that_is_a_link_keeps_its_bracket_pair():
         "File:A.jpg|[[Aristotle]] by [[Jusepe de Ribera|Ribera]]\n</gallery>")
     assert "]]" not in out and "[[" not in out
     assert "Hoggar" in out and "Aristotle by Ribera" in out
+
+
+def test_a_line_that_begins_with_a_template_close_is_not_a_table_close():
+    """A template whose last argument is empty ends a line with |}}.
+
+    Hiding "|}" at the start of a line took the first two characters of that,
+    leaving the template unclosed: 白浜町 and 6.7% of Japanese articles kept
+    their whole infobox as text. A table closes with |} and nothing after it.
+    """
+    import wikitext
+
+    out = wikitext.clean(
+        "{{日本の町村\n| 自治体名 = 白浜町\n| 画像の説明 = 南紀白浜温泉\n|}}\n"
+        "白浜町（しらはまちょう）は、和歌山県西牟婁郡の町。")
+    assert "{{" not in out and "}}" not in out
+    assert "白浜町（しらはまちょう）は、和歌山県西牟婁郡の町。" in out

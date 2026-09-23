@@ -168,7 +168,10 @@ def clean(t):
     # them. Hiding every "|}" took the closing brace off any template whose
     # last argument was empty, and {{as of|2023|February|}} survived whole.
     t = re.sub(r"(?m)^([ \t]*)\{\|", r"\1" + TABLE_OPEN, t)
-    t = re.sub(r"(?m)^([ \t]*)\|\}", r"\1" + TABLE_CLOSE, t)
+    # Not when another brace follows: a line beginning "|}}" is a template
+    # whose last argument was empty, and taking its first two characters left
+    # the template unclosed.
+    t = re.sub(r"(?m)^([ \t]*)\|\}(?!\})", r"\1" + TABLE_CLOSE, t)
 
     # Unwrap tag templates first, innermost-out, before anything strips braces.
     for _ in range(3):
