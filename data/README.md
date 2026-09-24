@@ -36,8 +36,8 @@ Every Wikipedia article that carries coordinates, with its text.
 
 | subset | articles | characters | share of the wiki |
 |---|---|---|---|
-| `20260901.en` | EN_COUNT | EN_CHARS | 19.0% of 7,235,024 |
-| `20260901.ja` | JA_COUNT | JA_CHARS | JA_SHARE |
+| `20260901.en` | 1,374,056 | 4,331,110,851 | 19.0% of 7,235,024 |
+| `20260901.ja` | 218,496 | 435,046,691 | 14.4% of 1,516,331 |
 
 Subsets are named `{dump}.{lang}`, as in
 [`wikimedia/wikipedia`](https://huggingface.co/datasets/wikimedia/wikipedia).
@@ -186,9 +186,18 @@ and which often names a place the body does not. Galleries leave their
 captions. References, comments, and blocks of music, mathematics or code are
 dropped whole.
 
-Some markup survives: a stray bracket in 2.7% of English articles and 0.4% of
-Japanese ones, a `style=` run in under 2% of each. The counts are in
-`provenance.yaml`.
+Some markup survives. Measured on the published text rather than on the dump:
+
+| | `20260901.en` | `20260901.ja` |
+|---|---|---|
+| a stray `[[` or `]]` | 0.9% | 0.3% |
+| an unclosed file link | 0.6% | 0.2% |
+| a `\|thumb\|` or `\|NNNpx\|` run | 0.7% | 0.3% |
+| a `style=` run | 0.2% | 1.4% |
+| a stray `{{` | 0.0% | 0.0% |
+
+Before these were fixed the first three stood at 96.3%, 55.6% and 55.3% in
+English. `provenance.yaml` records what each defect was.
 
 ## What is not here
 

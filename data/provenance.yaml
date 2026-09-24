@@ -4,16 +4,29 @@
 dataset:
   name: wikipedia-geotagged
   built: 2026-09-23
-  articles: 1374056
-  characters: 3843346999
-  languages: [en]
+  subsets:
+    - name: 20260901.en
+      articles: 1374056
+      characters: 4331110851
+      share_of_the_wiki: 19.0%   # of 7,235,024 articles
+    - name: 20260901.ja
+      articles: 218496
+      characters: 435046691
+      share_of_the_wiki: 14.4%   # of 1,516,331 articles
+  languages: [en, ja]
+
+layout: >
+  One subset per dump and language, named {dump}.{lang}, holding
+  train-NNNNN-of-NNNNN.parquet. The same shape as wikimedia/wikipedia, so that
+  code written for it reads this by changing the repository name, and a later
+  dump is added beside this one rather than replacing it.
 
 licence:
   text: CC BY-SA 4.0
   basis: >
-    The text is English Wikipedia and carries Wikipedia's licence. Attribution
-    and share-alike both apply; the url column locates each article's history,
-    which is where its authors are listed.
+    The text is Wikipedia and carries Wikipedia's licence, the same for both
+    language editions. Attribution and share-alike both apply; the url column
+    locates each article's history, which is where its authors are listed.
   reference: https://en.wikipedia.org/wiki/Wikipedia:Copyrights
   coordinates: >
     From MediaWiki's GeoData extension, published in the same dumps.
@@ -22,77 +35,92 @@ licence:
 
 sources:
   - name: geo_tags
-    file: enwiki-latest-geo_tags.sql.gz
-    bytes: 53391772
+    file: enwiki-20260901-geo_tags.sql.gz / jawiki-20260901-geo_tags.sql.gz
+    bytes: [53391772, 6113811]
     note: >
-      The GeoData extension's table of coordinates per page. 1,411,568 pages
-      carry one. This is what makes the selection exact rather than heuristic:
-      an editor wrote a coord template, so the article is about a place.
+      The GeoData extension's table of coordinates per page. 1,411,568 English
+      pages carry one and 225,255 Japanese. This is what makes the selection
+      exact rather than heuristic: an editor wrote a coord template, so the
+      article is about a place.
   - name: page
-    file: enwiki-latest-page.sql.gz
-    bytes: 2393769310
+    file: enwiki-20260901-page.sql.gz / jawiki-20260901-page.sql.gz
+    bytes: [2393769310, 171061922]
     note: geo_tags holds page ids only; titles and namespaces come from here.
   - name: page_props
-    file: enwiki-latest-page_props.sql.gz
-    bytes: 470958111
+    file: enwiki-20260901-page_props.sql.gz / jawiki-20260901-page_props.sql.gz
+    bytes: [470958111, 60096094]
     note: >
-      wikibase_item gives the Wikidata id for 99.9% of the articles. Matching
-      titles as strings was tried first and reached 52.8%, and could not tell
-      Alexander the Great from a town.
+      wikibase_item gives the Wikidata id for 99.9% of the English articles
+      and 99.1% of the Japanese. Matching titles as strings was tried first
+      and reached 52.8%, and could not tell Alexander the Great from a town.
   - name: pages-articles
-    file: enwiki-latest-pages-articles.xml.bz2
-    bytes: 25680955982
+    file: enwiki-20260901-pages-articles.xml.bz2 / jawiki-20260901-pages-articles.xml.bz2
+    bytes: [25680955982, 4730918124]
     note: the article text, streamed rather than expanded to disk.
 
 processing:
   - step: selecting the geographic articles
     script: src/geo_pages.py
     results:
-      pages_with_a_coordinate: 1411568
-      articles_not_redirects: 1374075
+      en: {pages_with_a_coordinate: 1411568, articles_not_redirects: 1374075}
+      ja: {pages_with_a_coordinate: 225255, articles_not_redirects: 218496}
     note: >
       Namespace 0 and not a redirect. Every column of geo_tags is kept, and
-      every tag on a page, not only the primary one: 44,477 pages carry two
-      tags and 7,173 carry three, and the non-primary ones are places the
-      article mentions rather than where it is.
+      every tag on a page, not only the primary one: 42,269 English pages
+      carry two tags and 6,520 carry three, and the non-primary ones are
+      places the article mentions rather than where it is.
 
   - step: attaching Wikidata ids
     script: src/link_qids.py
     results:
-      with_a_wikidata_item: 1373281
+      en: {with_a_wikidata_item: 1373281}
+      ja: {with_a_wikidata_item: 216440}
 
   - step: extracting the text
     script: src/extract_text.py
     note: >
       lbzip2 streams the dump in and iterparse walks it an element at a time,
       clearing each page as it goes, so nothing near 100 GB is ever held. The
-      wikitext cleaner unwraps templates and tables rather than stripping them.
+      wikitext cleaner unwraps templates and tables rather than stripping
+      them, keeps a file link's caption, and drops references, comments, and
+      blocks of music, mathematics or code whole.
+    residue: >
+      Some markup survives. Measured on the published text, English then
+      Japanese: a stray bracket in 0.9% and 0.3% of articles, an unclosed file
+      link in 0.6% and 0.2%, a |thumb| or |NNNpx| run in 0.7% and 0.3%, a
+      style= run in 0.2% and 1.4%, a stray brace in neither. Before the fixes
+      the first three stood at 96.3%, 55.6% and 55.3% in English.
 
   - step: publication
     script: src/publish.py
-    output: articles.parquet
+    output: "{dump}.{lang}/train-NNNNN-of-NNNNN.parquet"
     note: >
       Streamed into Parquet. The first four columns match wikimedia/wikipedia
       so that code written for it works unchanged.
 
 known_limitations:
   - >
-    Takes everything geo_tags lists, without filtering. 6.1% of the articles
-    are not places: Apollo 11, Alexander the Great, Alfred Nobel. Their
-    coordinates are a landing site, a birthplace, a headquarters.
+    Takes everything geo_tags lists, without filtering. 6.1% of the English
+    articles are not places: Apollo 11, Alexander the Great, Alfred Nobel.
+    Their coordinates are a landing site, a birthplace, a headquarters.
   - >
     Organisations rank high by incoming links from other geotagged articles:
     National Park Service 80,126, United States Geological Survey 47,487,
     2020 United States census 44,544. American settlement articles cite them
     by template.
   - >
-    10,681 tags are not on Earth: moon 4,911, Mars 3,145, Venus 1,222,
-    Mercury 944, Titan 459. Filter on gt_globe.
+    3,306 English articles and 303 Japanese have a primary tag that is not on
+    Earth: mostly the moon and Mars, but also Ganymede, Enceladus and Itokawa.
+    Filter on gt_globe.
   - >
-    gt_type is null on 57.5% of articles, so filtering by it keeps far less
-    than it should. Joining qid against wikidata-gazetteer and using
+    gt_type is null on 57.6% of English articles and 25.2% of Japanese, so
+    filtering by it keeps far less than it should, and keeps a different
+    amount in each subset. 300 Japanese articles are typed admin2nd, a
+    misspelling of adm2nd. Joining qid against wikidata-gazetteer and using
     instance_of is the reliable way.
-  - English only. geo_tags exists for every language edition.
+  - >
+    English and Japanese only. geo_tags exists for every language edition and
+    the same code would build them.
 
 corrections:
   - date: 2026-09-23
@@ -111,3 +139,25 @@ corrections:
       strip() takes every quote at the end of a value, and a value ending in
       an escaped quote ends in backslash, quote, quote. Both versions are in
       the tests.
+  - date: 2026-09-23
+    what: >
+      Seven defects in the wikitext cleaner, which had been written for the
+      OpenStreetMap Wiki and met Wikipedia's images and references for the
+      first time. 96.3% of English articles carried a stray bracket, 55.6% an
+      unclosed file link, 55.3% a thumb or px run. A self-closing <ref /> also
+      matched the opening pattern, so the search for a closing tag ran past
+      everything between: Alabama lost 14 KB of 91 KB, and 御蔵島村 lost the
+      sentence that says which prefecture it is in.
+    effect: >
+      The English subset grew from 3,843,346,999 characters to 4,331,110,851. The
+      difference is text that had been deleted, not markup added.
+    found_by: >
+      Building the Japanese subset. Every 市 article began with
+      style="width:280px; margin:2px auto", which is hard to miss.
+    note: >
+      The first fix of the table-and-template interaction introduced its own
+      defect: hiding "|}" to keep tables away from the template pattern also
+      took the first two characters of a line beginning "|}}", which is a
+      template whose last argument is empty. 6.7% of Japanese articles kept
+      their whole infobox as prose until that was corrected.
+
